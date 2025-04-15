@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkSlob Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    
+    h1 {
+      color: #333;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+    }
+    
+    .status {
+      margin: 20px 0;
+      padding: 15px;
+      border-radius: 5px;
+      background-color: #f5f5f5;
+    }
+    
+    .status.connected {
+      background-color: #d4edda;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .status.disconnected {
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .controls {
+      margin: 20px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #0069d9;
+    }
+    
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    input {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      width: 80px;
+    }
+    
+    .log {
+      margin-top: 20px;
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      background-color: #f9f9f9;
+      font-family: monospace;
+    }
+    
+    .log-entry {
+      margin: 5px 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 5px;
+    }
+    
+    .log-time {
+      color: #777;
+      font-size: 0.8em;
+    }
+  </style>
+</head>
+<body>
+  <h1>LinkSlob Demo</h1>
+  
+  <div id="status" class="status disconnected">
+    <strong>Status:</strong> Disconnected
+  </div>
+  
+  <div class="controls">
+    <button id="connectBtn">Connect</button>
+    <button id="disconnectBtn" disabled>Disconnect</button>
+    
+    <div>
+      <label for="bpmInput">BPM:</label>
+      <input type="number" id="bpmInput" min="20" max="300" value="120">
+      <button id="setBpmBtn" disabled>Set BPM</button>
+    </div>
+    
+    <div>
+      <label for="beatInput">Beat:</label>
+      <input type="number" id="beatInput" min="0" step="0.25" value="0">
+      <button id="setBeatBtn" disabled>Set Beat</button>
+    </div>
+    
+    <button id="startBtn" disabled>Start</button>
+    <button id="stopBtn" disabled>Stop</button>
+  </div>
+  
+  <div>
+    <strong>Current Values:</strong>
+    <div>BPM: <span id="currentBpm">-</span></div>
+    <div>Beat: <span id="currentBeat">-</span></div>
+    <div>Phase: <span id="currentPhase">-</span></div>
+    <div>Peers: <span id="currentPeers">-</span></div>
+  </div>
+  
+  <div class="log" id="log"></div>
+  
+  <!-- Include Socket.IO client -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  
+  <!-- Include LinkSlob client -->
+  <script src="/client.js"></script>
+  
+  <script>
+    // DOM elements
+    const statusEl = document.getElementById('status');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const bpmInput = document.getElementById('bpmInput');
+    const setBpmBtn = document.getElementById('setBpmBtn');
+    const beatInput = document.getElementById('beatInput');
+    const setBeatBtn = document.getElementById('setBeatBtn');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const currentBpmEl = document.getElementById('currentBpm');
+    const currentBeatEl = document.getElementById('currentBeat');
+    const currentPhaseEl = document.getElementById('currentPhase');
+    const currentPeersEl = document.getElementById('currentPeers');
+    const logEl = document.getElementById('log');
+    
+    // Create a LinkSlob client
+    const linkClient = new LinkSlobClient({
+      serverUrl: window.location.origin,
+      onUpdate: (data) => {
+        // Update displayed values
+        currentBpmEl.textContent = data.bpm.toFixed(1);
+        currentBeatEl.textContent = data.beat.toFixed(2);
+        currentPhaseEl.textContent = data.phase.toFixed(2);
+        currentPeersEl.textContent = data.numPeers;
+        
+        // Log the update (but not too frequently)
+        if (Math.floor(data.beat * 4) % 4 === 0) {
+          logMessage(`Link update: beat=${data.beat.toFixed(2)}, phase=${data.phase.toFixed(2)}, bpm=${data.bpm.toFixed(1)}, peers=${data.numPeers}`);
+        }
+      },
+      onStatusChange: (status) => {
+        logMessage(`Link status changed: ${JSON.stringify(status)}`);
+        updateConnectionStatus(status.isConnected);
+      },
+      onTransportChange: (state) => {
+        logMessage(`Transport state changed: ${state}`);
+      }
+    });
+    
+    // Enable debug logging
+    linkClient.setDebug(true);
+    
+    // Update UI based on connection status
+    function updateConnectionStatus(isConnected) {
+      if (isConnected) {
+        statusEl.className = 'status connected';
+        statusEl.innerHTML = '<strong>Status:</strong> Connected';
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        setBpmBtn.disabled = false;
+        setBeatBtn.disabled = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = false;
+      } else {
+        statusEl.className = 'status disconnected';
+        statusEl.innerHTML = '<strong>Status:</strong> Disconnected';
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        setBpmBtn.disabled = true;
+        setBeatBtn.disabled = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
+        
+        // Reset displayed values
+        currentBpmEl.textContent = '-';
+        currentBeatEl.textContent = '-';
+        currentPhaseEl.textContent = '-';
+        currentPeersEl.textContent = '-';
+      }
+    }
+    
+    // Add a log message
+    function logMessage(message) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString();
+      const logEntry = document.createElement('div');
+      logEntry.className = 'log-entry';
+      logEntry.innerHTML = `<span class="log-time">[${timeStr}]</span> ${message}`;
+      logEl.appendChild(logEntry);
+      logEl.scrollTop = logEl.scrollHeight;
+      
+      // Limit log entries
+      while (logEl.children.length > 100) {
+        logEl.removeChild(logEl.firstChild);
+      }
+    }
+    
+    // Connect button
+    connectBtn.addEventListener('click', () => {
+      logMessage('Connecting to LinkSlob server...');
+      linkClient.connect().then(() => {
+        logMessage('Connected to LinkSlob server');
+      }).catch(error => {
+        logMessage(`Failed to connect: ${error.message}`);
+        updateConnectionStatus(false);
+      });
+    });
+    
+    // Disconnect button
+    disconnectBtn.addEventListener('click', () => {
+      linkClient.disconnect();
+      logMessage('Disconnected from LinkSlob server');
+      updateConnectionStatus(false);
+    });
+    
+    // Set BPM button
+    setBpmBtn.addEventListener('click', () => {
+      const bpm = parseFloat(bpmInput.value);
+      if (!isNaN(bpm) && bpm > 0) {
+        linkClient.setBpm(bpm);
+        logMessage(`Setting BPM to ${bpm}`);
+      }
+    });
+    
+    // Set Beat button
+    setBeatBtn.addEventListener('click', () => {
+      const beat = parseFloat(beatInput.value);
+      if (!isNaN(beat) && beat >= 0) {
+        linkClient.setBeat(beat);
+        logMessage(`Setting beat to ${beat}`);
+      }
+    });
+    
+    // Start button
+    startBtn.addEventListener('click', () => {
+      linkClient.start();
+      logMessage('Starting transport');
+    });
+    
+    // Stop button
+    stopBtn.addEventListener('click', () => {
+      linkClient.stop();
+      logMessage('Stopping transport');
+    });
+    
+    // Initial log message
+    logMessage('LinkSlob Demo initialized. Click "Connect" to start.');
+  </script>
+</body>
+</html>
