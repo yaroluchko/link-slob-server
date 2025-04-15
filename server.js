@@ -40,7 +40,7 @@ let updateInterval = null;
 let connectedClients = 0;
 
 // Default update interval in milliseconds
-const DEFAULT_UPDATE_INTERVAL = 50;
+const DEFAULT_UPDATE_INTERVAL = 500;
 
 // Store the last values to avoid sending duplicate data
 let lastBeat = 0;
